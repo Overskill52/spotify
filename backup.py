@@ -81,17 +81,32 @@ def validate_environment() -> Tuple[str, str, str]:
     Проверяет наличие обязательных переменных окружения.
     Возвращает (client_id, client_secret, playlist_id).
     """
-    client_id = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
-    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
-    raw_playlist_id = os.getenv("SPOTIFY_PLAYLIST_ID", "").strip()
+    client_id = (
+        os.getenv("SPOTIFY_CLIENT_ID")
+        or os.getenv("CLIENTID")
+        or os.getenv("CLIENT_ID")
+        or ""
+    ).strip()
+    client_secret = (
+        os.getenv("SPOTIFY_CLIENT_SECRET")
+        or os.getenv("CLIENTSECRET")
+        or os.getenv("CLIENT_SECRET")
+        or ""
+    ).strip()
+    raw_playlist_id = (
+        os.getenv("SPOTIFY_PLAYLIST_ID")
+        or os.getenv("PLAYLISTID")
+        or os.getenv("PLAYLIST_ID")
+        or ""
+    ).strip()
 
     missing = []
     if not client_id:
-        missing.append("SPOTIFY_CLIENT_ID")
+        missing.append("SPOTIFY_CLIENT_ID / CLIENTID")
     if not client_secret:
-        missing.append("SPOTIFY_CLIENT_SECRET")
+        missing.append("SPOTIFY_CLIENT_SECRET / CLIENTSECRET")
     if not raw_playlist_id:
-        missing.append("SPOTIFY_PLAYLIST_ID")
+        missing.append("SPOTIFY_PLAYLIST_ID / PLAYLISTID")
 
     if missing:
         logger.error(
