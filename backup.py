@@ -59,21 +59,42 @@ def clean_playlist_id(raw_id: str) -> str:
     - Чистый ID: '37i9dQZF1DXcBWIGoYBM5M'
     - Ссылка: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=...'
     - Региональная ссылка: 'https://open.spotify.com/intl-ru/playlist/37i9dQZF1DXcBWIGoYBM5M'
+    - Мобильная ссылка: 'https://spotify.link/...'
     - URI: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M'
+    - Ссылка в кавычках: '"https://open.spotify.com/playlist/..."'
     """
-    raw_id = raw_id.strip()
+    # Удаляем пробелы и возможные случайные кавычки вокруг значения
+    raw_id = raw_id.strip().strip('"').strip("'").strip()
 
-    # Поддержка ссылок /playlist/<id> (включая региональные open.spotify.com/intl-xx/playlist/...)
-    url_match = re.search(r"playlist/([a-zA-Z0-9]+)", raw_id)
+    # Если передана сокращенная мобильная ссылка вида spotify.link
+    if "spotify.link" in raw_id or "spotify.app.link" in raw_id:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(
+                raw_id,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                raw_id = response.geturl()
+        except Exception as exc:
+            logger.warning("Не удалось развернуть короткую ссылку %s: %s", raw_id, exc)
+
+    # Ищем playlist/<id> или playlist:<id>
+    url_match = re.search(r"playlist[/:]([a-zA-Z0-9]+)", raw_id)
     if url_match:
         return url_match.group(1)
 
-    # Проверка URI формата spotify:playlist:...
-    if raw_id.startswith("spotify:playlist:"):
-        return raw_id.split("spotify:playlist:")[-1].split("?")[0].strip()
+    # Проверка старого формата URI spotify:user:...:playlist:...
+    if ":playlist:" in raw_id:
+        return raw_id.split(":playlist:")[-1].split("?")[0].strip()
 
-    # Очистка query-параметров, если передан сырой ID с параметрами
-    return raw_id.split("?")[0].strip()
+    # Очистка query-параметров и слэшей
+    clean = raw_id.split("?")[0].strip().rstrip("/")
+    if "/" in clean:
+        clean = clean.split("/")[-1]
+
+    return clean
 
 
 def validate_environment() -> Tuple[str, str, str]:
