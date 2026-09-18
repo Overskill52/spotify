@@ -226,6 +226,107 @@ def parse_track_item(item: Dict[str, Any]) -> Optional[Dict[str, str]]:
     }
 
 
+def fetch_tracks_via_embed(sp: spotipy.Spotify, playlist_id: str) -> List[Dict[str, str]]:
+    """
+    Резервный способ получения треков через публичную страницу плейлиста / embed.
+    Используется, когда Spotify Web API блокирует прямой запрос к /items (код 401).
+    """
+    import json
+    import ssl
+    import urllib.request
+
+    logger.info("Загрузка треков через публичный интерфейс Spotify (Embed API)...")
+    embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id}"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+
+    try:
+        req = urllib.request.Request(embed_url, headers=headers)
+        try:
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                html = resp.read().decode("utf-8")
+        except Exception:
+            ctx_unverified = ssl._create_unverified_context()
+            with urllib.request.urlopen(req, context=ctx_unverified, timeout=15) as resp:
+                html = resp.read().decode("utf-8")
+
+        match = re.search(
+            r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+            html,
+        )
+        if not match:
+            logger.error("Не удалось найти данные плейлиста на странице %s", embed_url)
+            sys.exit(1)
+
+        data = json.loads(match.group(1))
+        entity = data.get("props", {}).get("pageProps", {}).get("state", {}).get("data", {}).get("entity", {})
+        raw_track_list = entity.get("trackList") or []
+
+        if not raw_track_list:
+            logger.warning("Плейлист пуст или треки не найдены.")
+            return []
+
+        logger.info("Найдено %d треков в плейлисте. Запрашиваем полные метаданные...", len(raw_track_list))
+
+        track_ids = []
+        for t in raw_track_list:
+            uri = t.get("uri") or ""
+            if "spotify:track:" in uri:
+                track_ids.append(uri.split("spotify:track:")[-1].strip())
+
+        parsed_tracks: List[Dict[str, str]] = []
+
+        # Запрашиваем полные метаданные пачками по 50 треков через sp.tracks()
+        chunk_size = 50
+        enriched_by_id: Dict[str, Dict[str, Any]] = {}
+
+        for i in range(0, len(track_ids), chunk_size):
+            chunk = track_ids[i : i + chunk_size]
+            try:
+                tracks_response = sp.tracks(chunk)
+                for trk in tracks_response.get("tracks") or []:
+                    if trk and trk.get("id"):
+                        enriched_by_id[trk["id"]] = trk
+            except Exception as exc:
+                logger.warning("Не удалось обогатить пачку треков через Web API: %s", exc)
+
+        for t in raw_track_list:
+            uri = t.get("uri") or ""
+            tid = uri.split(":")[-1] if ":" in uri else uri
+            enriched_track = enriched_by_id.get(tid)
+
+            if enriched_track:
+                parsed = parse_track_item({"track": enriched_track, "added_at": ""})
+                if parsed:
+                    parsed_tracks.append(parsed)
+                    continue
+
+            clean_artists = t.get("subtitle", "").replace("\u00a0", " ").strip()
+            parsed_tracks.append({
+                "Artist(s)": clean_artists or "Unknown Artist",
+                "Track Name": t.get("title") or "Unknown Track",
+                "Album": "",
+                "Release Date": "",
+                "ISRC": "",
+                "Spotify URL": f"https://open.spotify.com/track/{tid}" if tid else "",
+                "Spotify URI": uri,
+                "Added At": "",
+            })
+
+        logger.info("Успешно подготовлено %d треков для сохранения.", len(parsed_tracks))
+        return parsed_tracks
+
+    except Exception as exc:
+        logger.error("Критическая ошибка при получении данных плейлиста через Embed: %s", exc)
+        sys.exit(1)
+
+
 def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> List[Dict[str, str]]:
     """
     Выполняет полную пагинацию по плейлисту Spotify и собирает все треки.
@@ -246,8 +347,12 @@ def fetch_all_tracks(sp: spotipy.Spotify, playlist_id: str) -> List[Dict[str, st
             additional_types=("track",),
         )
     except Exception as exc:
-        logger.error("Не удалось получить плейлист '%s': %s", playlist_id, exc)
-        sys.exit(1)
+        logger.warning(
+            "Не удалось получить плейлист через стандартный Web API: %s. "
+            "Переключаемся на резервный режим чтения публичного плейлиста...",
+            exc,
+        )
+        return fetch_tracks_via_embed(sp, playlist_id)
 
     playlist_total = response.get("total", "неизвестно") if response else "неизвестно"
     logger.info("Общее количество треков по данным Spotify API: %s", playlist_total)
