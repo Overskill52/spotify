@@ -37,7 +37,7 @@ jobs:
 
       - name: Fetch and backup Spotify playlist
         env:
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID || secrets.CLIENTID || secrets.CLIENT_ID }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID || secrets.CLIENTID || secrets.CLIENDID || secrets.CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET || secrets.CLIENTSECRET || secrets.CLIENT_SECRET }}
           SPOTIFY_PLAYLIST_ID: ${{ secrets.SPOTIFY_PLAYLIST_ID || secrets.PLAYLISTID || secrets.PLAYLIST_ID }}
         run: |

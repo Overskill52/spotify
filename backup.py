@@ -84,6 +84,7 @@ def validate_environment() -> Tuple[str, str, str]:
     client_id = (
         os.getenv("SPOTIFY_CLIENT_ID")
         or os.getenv("CLIENTID")
+        or os.getenv("CLIENDID")
         or os.getenv("CLIENT_ID")
         or ""
     ).strip()
