@@ -1,0 +1,29 @@
+# Переменные окружения и секреты
+.env
+.env.local
+*.env
+
+# Виртуальные окружения Python
+.venv/
+venv/
+ENV/
+env/
+
+# Кэш и артефакты сборки Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+
+# Файлы IDE и редакторов
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Прочее
+.DS_Store
+Thumbs.db
